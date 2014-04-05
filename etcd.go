@@ -105,8 +105,8 @@ func getDockerName(ecfg *EtcdDockerConfig) ([]string, error) {
 
 	for _, link := range ecfg.Links {
 		
-		alias := link.Alias
-		resp, err := client.Get("/_etcdocker/service/"+link.Name, false, false)
+		alias := strings.ToUpper(link.Alias)
+		resp, err := client.Get("/_etcdocker/service/" + link.Name, false, false)
 		if err != nil {
 			continue
 		}
