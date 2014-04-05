@@ -60,7 +60,7 @@ func parseRun(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*Conf
 		flHostname        = cmd.String([]string{"h", "-hostname"}, "", "Container host name")
 
 		flPeer          = cmd.String([]string{"#peer", "-peer"}, "", "Container host ipaddr")
-		flEndpoint         = cmd.String([]string{"#endpoint", "-endpoint"}, "127.0.0.1:4001", "etcd endpoint")
+		flEndpoint         = cmd.String([]string{"#endpoint", "-endpoint"}, "", "etcd endpoint. default 127.0.0.1:4001")
 
 		flMemoryString    = cmd.String([]string{"m", "-memory"}, "", "Memory limit (format: <number><optional unit>, where unit = b, k, m or g)")
 		flUser            = cmd.String([]string{"u", "-user"}, "", "Username or UID")
