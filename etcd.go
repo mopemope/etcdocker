@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mopemope/etdocker/runconfig"
-	"github.com/coreos/etcdctl/third_party/github.com/coreos/go-etcd/etcd"
+	"github.com/mopemope/etcdocker/runconfig"
+	"github.com/coreos/go-etcd/etcd"
 	"github.com/dotcloud/docker/api/client"
 )
 

@@ -1,0 +1,13 @@
+#!/bin/sh -e
+
+if [ ! -h src/github.com/mopemope/etcdocker ]; then
+	mkdir -p src/github.com/mopemope/
+	ln -s ../../.. src/github.com/mopemope/etcdocker
+fi
+
+export GOBIN=${PWD}/bin
+export GOPATH=${PWD}
+
+go get github.com/coreos/go-etcd/etcd
+go get github.com/dotcloud/docker/api
+go install github.com/mopemope/etcdocker
