@@ -199,25 +199,29 @@ func modifyArgs(size int, fArgs []string, ecfg *EtcdDockerConfig) []string {
 		if c != "-peer" &&
 			c != "-endpoint" &&
 			c != "--peer" &&
-			c != "--endpoint" &&
-			!override {
-			if !skipVal {
-				args[i] = c
-				i++
+			c != "--endpoint" {
+
+			if override {
+				if c != "-link" &&
+					c != "--link" {
+					if !skipVal {
+						args[i] = c
+						i++
+					} else {
+						skipVal = false
+					}
+
+				} else {
+					skipVal = true
+				}
 			} else {
-				skipVal = false
-			}
-		} else if override {
-			if c != "-link" &&
-				c != "--link" {
 				if !skipVal {
 					args[i] = c
 					i++
 				} else {
 					skipVal = false
 				}
-			} else {
-				skipVal = true
+
 			}
 		} else {
 			skipVal = true
