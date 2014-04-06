@@ -32,6 +32,35 @@ func showVersion() {
 	fmt.Printf("Docker version %s, build %s\n", dockerversion.VERSION, dockerversion.GITCOMMIT)
 }
 
+type ResultCapture struct {
+	ContainerId string
+	NetworkSettings []string
+	Output bool
+	EtcdDockerConfig *EtcdDockerConfig
+}
+
+func (c *ResultCapture) Write(b []byte) (int, error) {
+	out := strings.Trim(string(b), " \n")
+	if c.Output {
+		fmt.Fprintln(os.Stdout, out)
+		c.ContainerId = strings.Trim(out, " \n")
+	} else {
+		if out != "@" {
+			c.NetworkSettings = append(c.NetworkSettings, out)
+		} else {
+			if c.EtcdDockerConfig != nil {
+				c.EtcdDockerConfig.AddNetworkInfo(c.NetworkSettings)
+			}
+			c.NetworkSettings = make([]string, 0)
+		}
+	}
+	return len(b), nil
+}
+
+func (c *ResultCapture) Close() error {
+	return nil
+}
+
 func main() {
 
 	var (
@@ -105,14 +134,21 @@ func main() {
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
 	}
-
-	if *flTls || *flTlsVerify {
-		cli = client.NewDockerCli(os.Stdin, os.Stdout, os.Stderr, protoAddrParts[0], protoAddrParts[1], &tlsConfig)
-	} else {
-		cli = client.NewDockerCli(os.Stdin, os.Stdout, os.Stderr, protoAddrParts[0], protoAddrParts[1], nil)
+	
+	fArgs := flag.Args()
+	capture := &ResultCapture{
+		Output: true,
+		NetworkSettings: make([]string, 0),
 	}
 
-	fArgs := flag.Args()
+	if *flTls || *flTlsVerify {
+		//cli = client.NewDockerCli(os.Stdin, os.Stdout, os.Stderr, protoAddrParts[0], protoAddrParts[1], &tlsConfig)
+		cli = client.NewDockerCli(os.Stdin, capture, os.Stderr, protoAddrParts[0], protoAddrParts[1], &tlsConfig)
+	} else {
+		//cli = client.NewDockerCli(os.Stdin, os.Stdout, os.Stderr, protoAddrParts[0], protoAddrParts[1], nil)
+		cli = client.NewDockerCli(os.Stdin, capture, os.Stderr, protoAddrParts[0], protoAddrParts[1], nil)
+	}
+
 	if size, ecfg, err := checkArgs(cli, fArgs...); err == nil {
 
 		args := modifyArgs(size, fArgs, ecfg)
@@ -127,13 +163,24 @@ func main() {
 			log.Fatal(err)
 		} else {
 			// running 
-			if ecfg != nil && ecfg.Name != "" && len(ecfg.NameInfo.PortBindings) > 0 {
-
-				err := setDockerName(ecfg)
-				if err != nil {
-					log.Fatal(err)
-					os.Exit(-1)
-				}
+			if ecfg != nil && ecfg.Name != "" {
+				//fmt.Printf("ID: %s.", capture.ContainerId)
+				capture.Output = false
+				capture.EtcdDockerConfig = ecfg
+				// inspect container
+				if err := cli.ParseCommands([]string{"inspect", "-f", 
+					"{{range $k, $v := $.NetworkSettings.Ports}}{{$k}}{{ range $v }}{{.HostIp}}{{.HostPort}}{{end}}@{{ end }}",
+					capture.ContainerId}...); err != nil {
+						if _, ok := err.(*utils.StatusError); ok {
+							os.Exit(0)
+						}
+					} else {
+						err := ecfg.SetNetworkInfo()
+						if err != nil {
+							log.Fatal(err)
+							os.Exit(-1)
+						}
+					}
 			}
 		}
 	}

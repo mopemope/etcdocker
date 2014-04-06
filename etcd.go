@@ -70,7 +70,7 @@ func localIP() (string, error) {
 	return "", errors.New("cannot find local IP address")
 }
 
-func newClient(ecfg *EtcdDockerConfig) *etcd.Client {
+func (ecfg *EtcdDockerConfig) NewEtcdClient() *etcd.Client {
 	
 	if ecfg.EtcdClient != nil {
 		return ecfg.EtcdClient
@@ -98,9 +98,37 @@ func newClient(ecfg *EtcdDockerConfig) *etcd.Client {
 	return client
 }
 
-func getDockerName(ecfg *EtcdDockerConfig) ([]string, error) {
+func (ecfg *EtcdDockerConfig) AddNetworkInfo(settings []string) {
+	cPort := string(settings[0])
+	if cPort == "" {
+		return
+	}
+	rest := settings[1:]
+	
+	portBinding := portBinding{
+		ContainerPort: cPort,
+		PublicPorts:   make([]publicPort, len(rest) /2 ),
+	}
+	ecfg.NameInfo.PortBindings = append(ecfg.NameInfo.PortBindings, portBinding)
+	
+	for i := 0; i < len(rest); i+=2 {
+		var h string
 
-	client := newClient(ecfg)
+		if rest[i] != "0.0.0.0" {
+			h = rest[i]
+		} else {
+			h = ecfg.NameInfo.HostIp
+		}
+		portBinding.PublicPorts[i/2] = publicPort{
+			HostIp:   h,
+			HostPort: rest[i+1],
+		}
+	}
+}
+
+func (ecfg *EtcdDockerConfig) GetNetworkInfo() ([]string, error) {
+
+	client := ecfg.NewEtcdClient()
 	envs := make([]string, 0)
 
 	for _, link := range ecfg.Links {
@@ -143,9 +171,9 @@ func getDockerName(ecfg *EtcdDockerConfig) ([]string, error) {
 	return envs, nil
 }
 
-func setDockerName(ecfg *EtcdDockerConfig) error {
+func (ecfg *EtcdDockerConfig) SetNetworkInfo() error {
 
-	client := newClient(ecfg)
+	client := ecfg.NewEtcdClient()
 
 	b, err := json.Marshal(ecfg.NameInfo)
 	if err != nil {
@@ -194,7 +222,7 @@ func checkRunArgs(cli *client.DockerCli, args ...string) (int, *EtcdDockerConfig
 		NameInfo: nameInfo{
 			Name:         name,
 			HostIp:       peer,
-			PortBindings: make([]portBinding, len(portBindings)),
+			PortBindings: make([]portBinding, 0),
 		},
 		Links: make([]linkInfo, len(links)),
 	}
@@ -218,30 +246,6 @@ func checkRunArgs(cli *client.DockerCli, args ...string) (int, *EtcdDockerConfig
 		}
 	}
 
-	idx := 0
-
-	for cPort, ports := range portBindings {
-		portBinding := portBinding{
-			ContainerPort: string(cPort),
-			PublicPorts:   make([]publicPort, len(ports)),
-		}
-		ecfg.NameInfo.PortBindings[idx] = portBinding
-
-		for i, p := range ports {
-			var h string
-			if p.HostIp != "" {
-				h = p.HostIp
-			} else {
-				h = ecfg.NameInfo.HostIp
-			}
-			portBinding.PublicPorts[i] = publicPort{
-				HostIp:   h,
-				HostPort: p.HostPort,
-			}
-		}
-		idx++
-	}
-
 	if peer != "" {
 		extArg += 2
 	}
@@ -253,12 +257,12 @@ func checkRunArgs(cli *client.DockerCli, args ...string) (int, *EtcdDockerConfig
 	if image != "" && 
 		(name != "" && len(portBindings) > 0) ||
 		(len(links) > 0){
-		_ = newClient(ecfg)
+		_ = ecfg.NewEtcdClient()
 	}
 
 	if image != "" && len(links) > 0 {
 
-		envs, err := getDockerName(ecfg)
+		envs, err := ecfg.GetNetworkInfo()
 		if err != nil {
 			return 0, nil, err
 		}
