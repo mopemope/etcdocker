@@ -11,16 +11,15 @@ import (
 
 	"github.com/dotcloud/docker/api"
 	"github.com/dotcloud/docker/api/client"
-	"github.com/dotcloud/docker/opts"
 	"github.com/dotcloud/docker/dockerversion"
+	"github.com/dotcloud/docker/opts"
 	flag "github.com/dotcloud/docker/pkg/mflag"
 	"github.com/dotcloud/docker/utils"
-
 )
 
 const (
-	defaultCaFile = "ca.pem"
-	defaultKeyFile = "key.pem"
+	defaultCaFile   = "ca.pem"
+	defaultKeyFile  = "key.pem"
 	defaultCertFile = "cert.pem"
 )
 
@@ -33,9 +32,9 @@ func showVersion() {
 }
 
 type ResultCapture struct {
-	ContainerId string
-	NetworkSettings []string
-	Output bool
+	ContainerId      string
+	NetworkSettings  []string
+	Output           bool
 	EtcdDockerConfig *EtcdDockerConfig
 }
 
@@ -64,14 +63,14 @@ func (c *ResultCapture) Close() error {
 func main() {
 
 	var (
-		flVersion = flag.Bool([]string{"v", "-version"}, false, "Print version information and quit")
-		flDebug = flag.Bool([]string{"D", "-debug"}, false, "Enable debug mode")
-		flHosts = opts.NewListOpts(api.ValidateHost)
-		flTls = flag.Bool([]string{"-tls"}, false, "Use TLS; implied by tls-verify flags")
+		flVersion   = flag.Bool([]string{"v", "-version"}, false, "Print version information and quit")
+		flDebug     = flag.Bool([]string{"D", "-debug"}, false, "Enable debug mode")
+		flHosts     = opts.NewListOpts(api.ValidateHost)
+		flTls       = flag.Bool([]string{"-tls"}, false, "Use TLS; implied by tls-verify flags")
 		flTlsVerify = flag.Bool([]string{"-tlsverify"}, false, "Use TLS and verify the remote (daemon: verify client, client: verify daemon)")
-		flCa = flag.String([]string{"-tlscacert"}, dockerConfDir+defaultCaFile, "Trust only remotes providing a certificate signed by the CA given here")
-		flCert = flag.String([]string{"-tlscert"}, dockerConfDir+defaultCertFile, "Path to TLS certificate file")
-		flKey = flag.String([]string{"-tlskey"}, dockerConfDir+defaultKeyFile, "Path to TLS key file")
+		flCa        = flag.String([]string{"-tlscacert"}, dockerConfDir+defaultCaFile, "Trust only remotes providing a certificate signed by the CA given here")
+		flCert      = flag.String([]string{"-tlscert"}, dockerConfDir+defaultCertFile, "Path to TLS certificate file")
+		flKey       = flag.String([]string{"-tlskey"}, dockerConfDir+defaultKeyFile, "Path to TLS key file")
 	)
 	flag.Var(&flHosts, []string{"H", "-host"}, "tcp://host:port, unix://path/to/socket, fd://* or fd://socketfd to use in daemon mode. Multiple sockets can be specified")
 
@@ -103,12 +102,12 @@ func main() {
 	protoAddrParts := strings.SplitN(flHosts.GetAll()[0], "://", 2)
 
 	var (
-		cli *client.DockerCli
+		cli       *client.DockerCli
 		tlsConfig tls.Config
 	)
 	tlsConfig.InsecureSkipVerify = true
 
-// If we should verify the server, we need to load a trusted ca
+	// If we should verify the server, we need to load a trusted ca
 	if *flTlsVerify {
 		*flTls = true
 		certPool := x509.NewCertPool()
@@ -121,7 +120,7 @@ func main() {
 		tlsConfig.InsecureSkipVerify = false
 	}
 
-// If tls is enabled, try to load and send client certificates
+	// If tls is enabled, try to load and send client certificates
 	if *flTls || *flTlsVerify {
 		_, errCert := os.Stat(*flCert)
 		_, errKey := os.Stat(*flKey)
@@ -134,10 +133,10 @@ func main() {
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
 	}
-	
+
 	fArgs := flag.Args()
 	capture := &ResultCapture{
-		Output: true,
+		Output:          true,
 		NetworkSettings: make([]string, 0),
 	}
 
@@ -150,7 +149,6 @@ func main() {
 	}
 
 	if size, ecfg, err := checkArgs(cli, fArgs...); err == nil {
-
 		args := modifyArgs(size, fArgs, ecfg)
 
 		if err := cli.ParseCommands(args...); err != nil {
@@ -162,59 +160,73 @@ func main() {
 			}
 			log.Fatal(err)
 		} else {
-			// running 
+			// running
 			if ecfg != nil && ecfg.Name != "" {
 				//fmt.Printf("ID: %s.", capture.ContainerId)
 				capture.Output = false
 				capture.EtcdDockerConfig = ecfg
 				// inspect container
-				if err := cli.ParseCommands([]string{"inspect", "-f", 
+				if err := cli.ParseCommands([]string{"inspect", "-f",
 					"{{range $k, $v := $.NetworkSettings.Ports}}{{$k}}{{ range $v }}{{.HostIp}}{{.HostPort}}{{end}}@{{ end }}",
 					capture.ContainerId}...); err != nil {
-						if _, ok := err.(*utils.StatusError); ok {
-							os.Exit(0)
-						}
-					} else {
-						err := ecfg.SetNetworkInfo()
-						if err != nil {
-							log.Fatal(err)
-							os.Exit(-1)
-						}
+					if _, ok := err.(*utils.StatusError); ok {
+						os.Exit(0)
 					}
+				} else {
+					err := ecfg.SetNetworkInfo()
+					if err != nil {
+						log.Fatal(err)
+						os.Exit(-1)
+					}
+				}
 			}
 		}
 	}
 }
 
-func modifyArgs (size int, fArgs []string, ecfg *EtcdDockerConfig ) []string {
+func modifyArgs(size int, fArgs []string, ecfg *EtcdDockerConfig) []string {
 
 	var (
-		args = make([]string, size)
-		i = 0
-		nextVal = false
+		args    = make([]string, size)
+		i       = 0
+		skipVal = false
 	)
-	
+
+	override := ecfg != nil && ecfg.Envs != nil && len(ecfg.Envs) > 0
+
 	for _, c := range fArgs {
-		
+
 		if c != "-peer" &&
-			c != "-endpoint"  &&
+			c != "-endpoint" &&
 			c != "--peer" &&
-			c != "--endpoint" {
-			if (!nextVal) {
+			c != "--endpoint" &&
+			!override {
+			if !skipVal {
 				args[i] = c
 				i++
 			} else {
-				nextVal = false
+				skipVal = false
+			}
+		} else if override {
+			if c != "-link" &&
+				c != "--link" {
+				if !skipVal {
+					args[i] = c
+					i++
+				} else {
+					skipVal = false
+				}
+			} else {
+				skipVal = true
 			}
 		} else {
-			nextVal = true
+			skipVal = true
 		}
 	}
 
-	if ecfg != nil && ecfg.Envs != nil && len(ecfg.Envs) > 0 {
+	if override {
 		args = append(append(args[:1], ecfg.Envs...), args[1:]...)
 	}
 	//fmt.Println(args)
 	return args
 }
-

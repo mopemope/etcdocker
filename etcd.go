@@ -8,19 +8,19 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mopemope/etcdocker/runconfig"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/dotcloud/docker/api/client"
+	"github.com/mopemope/etcdocker/runconfig"
 )
 
 type EtcdDockerConfig struct {
-	Name     string
-	HostIp   string
-	Endpoint string
-	Sync     bool
-	NameInfo nameInfo
-	Links    []linkInfo
-	Envs     []string
+	Name       string
+	HostIp     string
+	Endpoint   string
+	Sync       bool
+	NameInfo   nameInfo
+	Links      []linkInfo
+	Envs       []string
 	EtcdClient *etcd.Client
 }
 
@@ -71,7 +71,7 @@ func localIP() (string, error) {
 }
 
 func (ecfg *EtcdDockerConfig) NewEtcdClient() *etcd.Client {
-	
+
 	if ecfg.EtcdClient != nil {
 		return ecfg.EtcdClient
 	}
@@ -104,14 +104,14 @@ func (ecfg *EtcdDockerConfig) AddNetworkInfo(settings []string) {
 		return
 	}
 	rest := settings[1:]
-	
+
 	portBinding := portBinding{
 		ContainerPort: cPort,
-		PublicPorts:   make([]publicPort, len(rest) /2 ),
+		PublicPorts:   make([]publicPort, len(rest)/2),
 	}
 	ecfg.NameInfo.PortBindings = append(ecfg.NameInfo.PortBindings, portBinding)
-	
-	for i := 0; i < len(rest); i+=2 {
+
+	for i := 0; i < len(rest); i += 2 {
 		var h string
 
 		if rest[i] != "0.0.0.0" {
@@ -126,15 +126,16 @@ func (ecfg *EtcdDockerConfig) AddNetworkInfo(settings []string) {
 	}
 }
 
-func (ecfg *EtcdDockerConfig) GetNetworkInfo() ([]string, error) {
+func (ecfg *EtcdDockerConfig) GetNetworkInfo() ([]string, int, error) {
 
 	client := ecfg.NewEtcdClient()
 	envs := make([]string, 0)
+	linkCount := 0
 
 	for _, link := range ecfg.Links {
-		
+
 		alias := strings.ToUpper(link.Alias)
-		resp, err := client.Get("/_etcdocker/service/" + link.Name, false, false)
+		resp, err := client.Get("/_etcdocker/service/"+link.Name, false, false)
 		if err != nil {
 			continue
 		}
@@ -145,6 +146,13 @@ func (ecfg *EtcdDockerConfig) GetNetworkInfo() ([]string, error) {
 		res := &nameInfo{}
 		json.Unmarshal([]byte(resp.Node.Value), &res)
 
+		if res.HostIp == ecfg.HostIp {
+			continue
+		}
+
+		linkCount++
+
+		// override ENV
 		for _, portBinding := range res.PortBindings {
 			cPort := strings.Split(portBinding.ContainerPort, "/")
 
@@ -168,7 +176,7 @@ func (ecfg *EtcdDockerConfig) GetNetworkInfo() ([]string, error) {
 			}
 		}
 	}
-	return envs, nil
+	return envs, linkCount, nil
 }
 
 func (ecfg *EtcdDockerConfig) SetNetworkInfo() error {
@@ -254,19 +262,23 @@ func checkRunArgs(cli *client.DockerCli, args ...string) (int, *EtcdDockerConfig
 		extArg += 2
 	}
 
-	if image != "" && 
+	if image != "" &&
 		(name != "" && len(portBindings) > 0) ||
-		(len(links) > 0){
+		(len(links) > 0) {
 		_ = ecfg.NewEtcdClient()
 	}
 
 	if image != "" && len(links) > 0 {
 
-		envs, err := ecfg.GetNetworkInfo()
+		envs, linkCount, err := ecfg.GetNetworkInfo()
 		if err != nil {
 			return 0, nil, err
 		}
 		ecfg.Envs = envs
+
+		if envs != nil && len(envs) > 0 {
+			extArg += linkCount * 2
+		}
 	}
 
 	return len(args) + 1 - extArg, ecfg, nil
