@@ -42,8 +42,8 @@ type ResultCapture struct {
 func (c *ResultCapture) Write(b []byte) (int, error) {
 	out := strings.Trim(string(b), " \n")
 	if c.Output {
-		fmt.Fprintln(os.Stdout, out)
-		c.ContainerId = strings.Trim(out, " \n")
+		fmt.Fprint(os.Stdout, string(b))
+		c.ContainerId = out
 	} else {
 		if out != "@" {
 			c.NetworkSettings = append(c.NetworkSettings, out)
