@@ -8,6 +8,7 @@ fi
 export GOBIN=${PWD}/bin
 export GOPATH=${PWD}
 
+go get github.com/kr/pty
 go get github.com/coreos/go-etcd/etcd
 go get github.com/dotcloud/docker/api
 go install github.com/mopemope/etcdocker
